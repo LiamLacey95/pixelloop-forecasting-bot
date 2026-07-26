@@ -1,0 +1,78 @@
+name: Forecast in a loop (scheduler-independent)
+
+# Insurance against GitHub's scheduler, which has never once triggered this repo's cron.
+#
+# Tournament questions open and close inside a MEDIAN OF 2.4 HOURS, and an unforecast question
+# scores exactly zero while prize share goes as the square of summed peer score. So a bot that
+# only runs when someone presses a button is not a slow bot, it is a bot that scores nothing on
+# most of the season.
+#
+# A single GitHub-hosted job can run for six hours. This spends them: forecast, wait 20 minutes,
+# forecast again, until the budget of wall-clock is nearly gone. One manual dispatch therefore
+# buys ~6 hours of unattended coverage with no dependency on `schedule` firing, no personal access
+# token, and no external host.
+#
+# It is deliberately NOT scheduled itself - that would reintroduce the thing it works around, and
+# two of these running at once would double-spend. The concurrency group makes that impossible
+# anyway.
+#
+# Cost is bounded by the tournament, not by this loop: the bot skips questions it has already
+# forecast, so an iteration with nothing new open costs one Metaculus API call and no LLM calls.
+on:
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: "How long to keep forecasting (max 5.5, GitHub kills the job at 6)"
+        required: false
+        default: "5.5"
+      interval_minutes:
+        description: "Minutes to wait between passes"
+        required: false
+        default: "20"
+
+concurrency:
+  group: forecast-loop
+  cancel-in-progress: false
+
+jobs:
+  loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-root
+
+      - name: Forecast on a loop
+        env:
+          METACULUS_TOKEN: ${{ secrets.METACULUS_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          PYTHONIOENCODING: utf-8
+        run: |
+          set -u
+          deadline=$(( $(date +%s) + $(python -c "print(int(float('${{ inputs.hours }}') * 3600))") ))
+          interval=$(( ${{ inputs.interval_minutes }} * 60 ))
+          pass=0
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            pass=$((pass + 1))
+            echo "::group::pass $pass at $(date -u +%H:%M:%S)"
+            # A failing pass must not end the loop - one bad question or a provider blip should
+            # cost that pass, not the remaining hours of coverage.
+            poetry run python main.py || echo "pass $pass exited non-zero, continuing"
+            echo "::endgroup::"
+            remaining=$(( deadline - $(date +%s) ))
+            if [ "$remaining" -le "$interval" ]; then
+              echo "less than one interval left, stopping after $pass passes"
+              break
+            fi
+            sleep "$interval"
+          done
