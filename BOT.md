@@ -120,6 +120,40 @@ The accompanying comparison reports logit-mean against the template's median acr
 regimes rather than picking the flattering one. The two are close — this layer is not where the
 points are, and the file says so.
 
+## What the bot-maker survey says, and what we can act on
+
+Metaculus surveyed 39 developers from the Fall 2025 tournament and merged the answers with the
+final leaderboard ([notebook](https://www.metaculus.com/notebooks/43337/fall-2025-futureeval-survey/)).
+Its headline is that model choice is now table stakes and **scaffolding is the differentiator** —
+within the GPT-5 family alone, the best and worst scaffolds are ~27 peer points per question
+apart, which is larger than three generations of model progress.
+
+Its priority list for the next round, scored against this bot:
+
+| # | Priority | Here |
+|---|---|---|
+| 1 | Two or three research sources, not one | **No** — one. Strongest predictor in the dataset (r = 0.42, p = 0.006); winners averaged 1.75 sources, non-winners 1.00 |
+| 2 | Cap predictions at a max/min | **Yes** — `[0.02, 0.98]`. Strongest within-winners differentiator (r = +0.48) |
+| 3 | Calculate base rates explicitly | **Yes** — added to the binary prompt (r = +0.38; 40% of top-15 winners, 7% of the bottom half, 0% of non-winners) |
+| 4 | Similar past questions as a prior | **Closed to us** — see below |
+| 5 | 10–30 LLM calls per question | **No** — about 5. Median winner made 28, median non-winner 7 |
+| 6 | Manual-review loop for outliers | Partly — `disagreement()` logs, nothing reviews |
+| 7 | Aggregate across multiple models | **No** — two samples of one model, because one model is measurably the best and the budget binds |
+
+**Item 4 is not a gap, it is a wall.** A bot-account token receives `resolution: null` on resolved
+questions and an empty `aggregations.recency_weighted.latest` on every question — list endpoint and
+detail endpoint, with and without `with_cp=true`. Search works and returns genuinely adjacent
+questions; only the numbers are stripped. Metaculus is deliberately stopping bots anchoring to the
+crowd, which is the point of a bot benchmark, so this is a restriction to respect rather than route
+around. It is also why `bakeoff.py` cannot score candidate models against resolved questions.
+
+**One number from the survey is worth keeping in view when spending:** the median prize-winner
+spent about **$0.90 per question** and the top-15 winners about **$1.40**, while *every* non-winner
+spent under $1.00 and half spent under $0.10. This bot is at ~$0.17. That correlation is measured
+among bots that already had full coverage, though — on a fixed budget, total peer score is
+`budget × (peer per pound)`, and the cheap pipeline wins that comparison by roughly 5x. Spend more
+per question only once coverage of the remaining season is already paid for.
+
 ## What is deliberately not done yet
 
 - **Numeric and multiple-choice** fall through to the template untouched. This is where bots bleed
