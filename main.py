@@ -477,13 +477,19 @@ if __name__ == "__main__":
 
     bot = CalibratedBot(
         research_reports_per_question=1,
-        # Two, not six. The samples all come from one model at temperature, so averaging them
-        # cancels decode noise and nothing else - the third sample buys a fraction of a peer
-        # point. Coverage buys much more: an unforecast question scores exactly 0, and the prize
-        # pool pays on the SQUARE of summed peer score, so a question skipped for want of credit
-        # is the most expensive thing that can happen. Two samples is ~50% more questions covered.
-        # Raise this the day Metaculus's sponsored credits land and the budget stops binding.
-        predictions_per_research_report=2,
+        # Three. The survey found 86% of prize winners aggregate across multiple forecasts, with
+        # "median or mean of 3-10 runs" typical - two was below the range that wins anything.
+        #
+        # The counter-argument is in this file already: the samples come from one model at
+        # temperature, so averaging cancels decode noise and little else. That caps the value of a
+        # third sample, it does not make it negative, and at $0.023 a sample against a $0.17
+        # question it is the cheapest lever left.
+        #
+        # The budget is what sets the ceiling. Roughly 175 questions remain before the season
+        # closes on 6 September; at three samples that is about $34 of the ~$44 available, which
+        # leaves headroom for Exa research being variable ($0.055-0.13) and for the question count
+        # being an estimate. Four samples would spend essentially all of it and leave none.
+        predictions_per_research_report=3,
         use_research_summary_to_forecast=False,
         # The framework summarises the research on every question by default, and with
         # use_research_summary_to_forecast=False that summary is never fed to the forecast - it
