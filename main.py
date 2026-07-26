@@ -131,7 +131,14 @@ ENSEMBLE_MODELS = [
 #
 # So this is a runaway guard and NOT the cost lever. Squeezing it does not save money, it buys
 # truncated answers at full price.
-MAX_FORECAST_TOKENS = 16000
+#
+# RAISED WITH THE EFFORT CHANGE, AND THE TWO MUST MOVE TOGETHER. 16000 was sized against "low".
+# High effort spends far more of the shared budget on thinking, and the failure it produces is the
+# expensive one already paid for once: thinking eats the allowance, the answer is cut before the
+# probability line, the parser correctly finds no forecast, and the question scores zero at full
+# price. Doubling the guard costs nothing when it is not reached - it bills actual tokens, not the
+# cap - and prevents the one failure mode this change introduces.
+MAX_FORECAST_TOKENS = 32000
 
 # "low" because thinking bills as output and GPT-5.6 Sol charges $30/M for it, so an unbounded
 # thinking budget on this list would cost more per question than the entire previous ensemble.
@@ -142,7 +149,14 @@ MAX_FORECAST_TOKENS = 16000
 # consistently and substantially better - Grok 4.20 goes 6.13 to 14.99, GPT 5.1 goes 4.64 to
 # 12.14, Kimi K2 goes 0.97 to 5.64. On a bigger budget this should be "high", and the fact that it
 # is not is a budget decision rather than a forecasting one.
-REASONING_EFFORT = "low"
+#
+# 2026-07-26: the budget stopped binding, so this reverts to the forecasting answer. Credit is
+# $41.59 against roughly 100 tournament questions left before the 6 September close, which is
+# $0.41 a question; "low" spends $0.05. Coverage is now capped by how few questions the tournament
+# releases (leg1 ran 5h12m and found ONE), not by money, so the remaining budget can only be spent
+# per-question. Raising effort is the change with the most direct evidence behind it: the same
+# model at high effort scores roughly double on every pair measured above.
+REASONING_EFFORT = "high"
 
 # Second research index. Perplexity rather than another `:online` call, because OpenRouter's
 # plugin is Exa behind every model and two Exa calls are not two sources. See run_research for

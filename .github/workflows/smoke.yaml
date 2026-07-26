@@ -1,0 +1,55 @@
+name: Smoke one question
+
+# smoke_one.py already existed and had no way to run: the API keys live only in GitHub secrets, so
+# it could not be run locally by anyone who did not separately hold them. One question costs a few
+# pennies against ~$0.87 for a full sandbox pass, and it catches the same class of bug - a
+# truncated rationale, a dead model slug, a parser that cannot read the schema.
+#
+#     gh workflow run smoke.yaml -R LiamLacey95/pixelloop-forecasting-bot -f kind=binary
+#
+# Forecasts the bot-testing-area sandbox and never publishes, so it cannot touch a tournament
+# score. Not scheduled: it is a thing you run after changing something.
+
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: "Question type to smoke test"
+        required: false
+        default: "binary"
+        type: choice
+        options: [binary, numeric, multiple_choice]
+
+# Deliberately NOT in the forecast-loop concurrency group: this must be runnable while the loop is
+# mid-flight, which is exactly when a change needs checking.
+concurrency:
+  group: smoke-one
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-root
+      - name: Smoke one question
+        run: poetry run python smoke_one.py "${{ inputs.kind }}"
+        env:
+          METACULUS_TOKEN: ${{ secrets.METACULUS_TOKEN }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ASKNEWS_CLIENT_ID: ${{ secrets.ASKNEWS_CLIENT_ID }}
+          ASKNEWS_SECRET: ${{ secrets.ASKNEWS_SECRET }}
