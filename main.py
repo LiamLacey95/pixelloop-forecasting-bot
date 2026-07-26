@@ -57,6 +57,7 @@ from calibration import (  # noqa: E402
     disagreement,
     needs_more_research,
 )
+from forecasting_tools.util.misc import clean_indents  # noqa: E402
 from template_bot import SummerTemplateBot2026  # noqa: E402
 
 dotenv.load_dotenv()
@@ -142,6 +143,11 @@ MAX_FORECAST_TOKENS = 16000
 # 12.14, Kimi K2 goes 0.97 to 5.64. On a bigger budget this should be "high", and the fact that it
 # is not is a budget decision rather than a forecasting one.
 REASONING_EFFORT = "low"
+
+# Second research index. Perplexity rather than another `:online` call, because OpenRouter's
+# plugin is Exa behind every model and two Exa calls are not two sources. See run_research for
+# why a source measured at -15.48 alone is still worth adding alongside a good one.
+SECOND_RESEARCH_MODEL = "openrouter/perplexity/sonar"
 
 # Omitted entirely rather than passed as None, so the request carries the provider's own default
 # instead of an explicit null the provider may or may not interpret the same way.
@@ -259,6 +265,77 @@ class CalibratedBot(SummerTemplateBot2026):
             **EFFORT_KWARG,
         )
 
+    async def run_research(self, question):
+        """Two search indexes rather than one, because breadth is the best-evidenced lever there is.
+
+        Metaculus's bot-maker survey found number of distinct research sources to be the strongest
+        predictor of score in the whole dataset (r = 0.42, p = 0.006) - winners averaged 1.75
+        sources, non-winners 1.00, and the note was explicit that "the takeaway isn't which source
+        to pick, it's that one source is usually not enough".
+
+        Two `:online` calls would not be breadth: OpenRouter's plugin is Exa behind every model.
+        Perplexity queries a different index, and costs $0.005 against Exa's $0.055-0.13, so the
+        second source adds well under 1% to the bill.
+
+        The obvious objection is that `metac-deepseek-r1+sonar` scores -15.48 per question live,
+        8.5 points WORSE than the same model with no research at all. That is a measurement of
+        sonar as the SOLE source, where a terse and confident summary is all the forecaster sees.
+        Here it is labelled, secondary, and read alongside Exa - and on the probe that motivated
+        this, sonar returned the one concrete fact (a date and a location) that the Exa write-up
+        buried. Being wrong about this costs half a cent a question; being right is the single
+        strongest correlation in the survey.
+
+        Either source may fail without taking the forecast down with it.
+        """
+        prompt = clean_indents(
+            f"""
+            You are an assistant to a superforecaster.
+            The superforecaster will give you a question they intend to forecast on.
+            To be a great assistant, you generate a concise but detailed rundown of the most relevant news, including if the question would resolve Yes or No based on current information.
+            You do not produce forecasts yourself.
+
+            Question:
+            {question.question_text}
+
+            This question's outcome will be determined by the specific criteria below:
+            {question.resolution_criteria}
+
+            {question.fine_print}
+            """
+        )
+
+        async def search(llm, label):
+            try:
+                return label, await llm.invoke(prompt)
+            except Exception as e:  # noqa: BLE001 - one dead index must not lose the question
+                logger.warning(f"{label} research failed for {question.page_url}: {e}")
+                return label, ""
+
+        async with self._concurrency_limiter:
+            results = await asyncio.gather(
+                search(self.get_llm("researcher", "llm"), "Exa web search"),
+                search(
+                    GeneralLlm(
+                        model=SECOND_RESEARCH_MODEL, temperature=0.1, timeout=120, allowed_tries=2
+                    ),
+                    "Perplexity search (independent index)",
+                ),
+            )
+
+        sections = [f"## {label}\n\n{text.strip()}" for label, text in results if text.strip()]
+        if not sections:
+            logger.warning(f"Both research sources returned nothing for {question.page_url}")
+            return ""
+        if len(sections) > 1:
+            sections.insert(
+                0,
+                "Two independent search indexes were queried. Where they disagree on a fact, say "
+                "so and weigh which is better sourced rather than averaging them.",
+            )
+        research = "\n\n".join(sections)
+        logger.info(f"Found Research for URL {question.page_url}:\n{research}")
+        return research
+
     async def _run_forecast_on_binary(self, question, research):
         """The template's prompt plus an explicit base-rate step.
 
@@ -275,8 +352,6 @@ class CalibratedBot(SummerTemplateBot2026):
         This costs nothing - it is the same call with a longer instruction - which makes it the
         best-evidenced change available while credit is the binding constraint.
         """
-        from forecasting_tools.util.misc import clean_indents
-
         prompt = clean_indents(
             f"""
             You are a professional forecaster interviewing for a job.
