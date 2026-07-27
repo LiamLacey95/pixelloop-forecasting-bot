@@ -150,13 +150,22 @@ MAX_FORECAST_TOKENS = 32000
 # 12.14, Kimi K2 goes 0.97 to 5.64. On a bigger budget this should be "high", and the fact that it
 # is not is a budget decision rather than a forecasting one.
 #
-# 2026-07-26: the budget stopped binding, so this reverts to the forecasting answer. Credit is
-# $41.59 against roughly 100 tournament questions left before the 6 September close, which is
-# $0.41 a question; "low" spends $0.05. Coverage is now capped by how few questions the tournament
-# releases (leg1 ran 5h12m and found ONE), not by money, so the remaining budget can only be spent
-# per-question. Raising effort is the change with the most direct evidence behind it: the same
-# model at high effort scores roughly double on every pair measured above.
-REASONING_EFFORT = "high"
+# 2026-07-26: tried "high" on the reasoning that the budget had stopped binding. MEASURED, AND
+# REVERTED THE NEXT MORNING. Both halves of that reasoning were wrong.
+#
+# Cost: high effort billed **$0.44 to $1.26 a question**, averaging about $0.78 - not the ~$0.15
+# guessed from the smoke run, where the one visible cost line turned out to be the Exa research
+# call rather than the forecast. Low effort is measured at $0.161.
+#
+# Supply: the claim that questions were scarce came from one leg that found a single question in
+# five hours. The very next leg forecast FOURTEEN overnight. A five-hour window says nothing about
+# a release schedule, and one leg spent $10.88 of a $41.59 balance.
+#
+# Together those give ~$136 to finish the season against ~$30 left, so the credit dies in about
+# forty questions and every question after it scores exactly zero. An unforecast question is not a
+# cheaper forecast, it is a zero, which is why cost per question is a coverage decision and not a
+# quality one. High effort is the right call the day sponsored credit lands and not before.
+REASONING_EFFORT = "low"
 
 # Second research index. Perplexity rather than another `:online` call, because OpenRouter's
 # plugin is Exa behind every model and two Exa calls are not two sources. See run_research for
